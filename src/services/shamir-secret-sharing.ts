@@ -1,6 +1,6 @@
 /**
  * Implementation of Shamir's Secret Sharing for secure private key management
- * With fixes for BigInt operations
+ * Fixed version for TypeScript
  */
 
 // ตรวจสอบการรองรับ BigInt
@@ -19,18 +19,14 @@ if (typeof BigInt === 'undefined') {
     
     /**
      * Split a secret into n shares with threshold t
-     * @param secretBytes Secret as bytes
-     * @param numShares Number of shares to generate
-     * @param threshold Minimum shares needed for reconstruction
-     * @returns Array of shares
      */
     splitSecret: (secretBytes: Uint8Array, numShares: number, threshold: number): Secretshare[] => {
       if (threshold > numShares) {
         throw new Error('Threshold cannot be greater than the number of shares');
       }
       
-      // Convert secret bytes to BigInt
-      const secret = ShamirSecretSharing._bytesToBigInt(secretBytes);
+      // Convert secret bytes to bigint
+      const secret = ShamirSecretSharing._bytesToBigint(secretBytes);
       
       // Generate random polynomial
       const polynomial = ShamirSecretSharing._generatePolynomial(secret, threshold);
@@ -48,9 +44,6 @@ if (typeof BigInt === 'undefined') {
     
     /**
      * Reconstruct secret from t shares
-     * @param shares Array of shares
-     * @param secretLength Length of the secret in bytes
-     * @returns Reconstructed secret as bytes
      */
     reconstructSecret: (shares: Secretshare[], secretLength: number): Uint8Array => {
       if (shares.length < 2) {
@@ -59,7 +52,7 @@ if (typeof BigInt === 'undefined') {
       
       const prime = ShamirSecretSharing.PRIME;
       const xs: number[] = shares.map(share => share.x);
-      const ys: BigInt[] = shares.map(share => BigInt(share.y));
+      const ys: bigint[] = shares.map(share => BigInt(share.y));
       
       // Interpolate at x=0 to get the secret (constant term)
       let secret = BigInt(0);
@@ -75,18 +68,15 @@ if (typeof BigInt === 'undefined') {
         }
       }
       
-      // Convert BigInt to byte array
-      return ShamirSecretSharing._bigIntToBytes(secret, secretLength);
+      // Convert bigint to byte array
+      return ShamirSecretSharing._bigintToBytes(secret, secretLength);
     },
     
     /**
      * Generate random polynomial of degree (threshold-1)
-     * @param secret Constant term of the polynomial (the secret)
-     * @param threshold Degree + 1 of the polynomial
-     * @returns Array of coefficients, starting with the constant term
      */
-    _generatePolynomial: (secret: BigInt, threshold: number): BigInt[] => {
-      const polynomial: BigInt[] = [secret]; // Constant term is the secret
+    _generatePolynomial: (secret: bigint, threshold: number): bigint[] => {
+      const polynomial: bigint[] = [secret]; // Constant term is the secret
       
       // Generate random coefficients for the polynomial
       for (let i = 1; i < threshold; i++) {
@@ -94,8 +84,8 @@ if (typeof BigInt === 'undefined') {
         const randBytes = new Uint8Array(32);
         crypto.getRandomValues(randBytes);
         
-        // Convert to BigInt and mod with prime
-        const randomCoeff = ShamirSecretSharing._bytesToBigInt(randBytes) % ShamirSecretSharing.PRIME;
+        // Convert to bigint and mod with prime
+        const randomCoeff = ShamirSecretSharing._bytesToBigint(randBytes) % ShamirSecretSharing.PRIME;
         polynomial.push(randomCoeff);
       }
       
@@ -104,11 +94,8 @@ if (typeof BigInt === 'undefined') {
     
     /**
      * Evaluate polynomial at point x using Horner's method
-     * @param polynomial Array of coefficients
-     * @param x Point to evaluate at
-     * @returns Result of polynomial evaluation
      */
-    _evaluatePolynomial: (polynomial: BigInt[], x: number): BigInt => {
+    _evaluatePolynomial: (polynomial: bigint[], x: number): bigint => {
       let result = BigInt(0);
       const prime = ShamirSecretSharing.PRIME;
       const bigX = BigInt(x);
@@ -123,12 +110,8 @@ if (typeof BigInt === 'undefined') {
     
     /**
      * Calculate Lagrange basis polynomial for interpolation
-     * @param x Point to evaluate at
-     * @param xs Array of x coordinates
-     * @param j Index to calculate basis for
-     * @returns Evaluated Lagrange basis
      */
-    _lagrangeBasis: (x: number, xs: number[], j: number): BigInt => {
+    _lagrangeBasis: (x: number, xs: number[], j: number): bigint => {
       let basis = BigInt(1);
       const prime = ShamirSecretSharing.PRIME;
       const bigX = BigInt(x);
@@ -170,11 +153,8 @@ if (typeof BigInt === 'undefined') {
     
     /**
      * Calculate modular inverse using Extended Euclidean Algorithm
-     * @param a Number to find inverse for
-     * @param m Modulus
-     * @returns Modular inverse
      */
-    _modInverse: (a: BigInt, m: BigInt): BigInt => {
+    _modInverse: (a: bigint, m: bigint): bigint => {
       if (m === BigInt(1)) return BigInt(0);
       
       let m0 = m;
@@ -205,11 +185,9 @@ if (typeof BigInt === 'undefined') {
     },
     
     /**
-     * Convert bytes to BigInt
-     * @param bytes Byte array
-     * @returns BigInt representation
+     * Convert bytes to bigint
      */
-    _bytesToBigInt: (bytes: Uint8Array): BigInt => {
+    _bytesToBigint: (bytes: Uint8Array): bigint => {
       let hex = '0x';
       for (let i = 0; i < bytes.length; i++) {
         hex += bytes[i].toString(16).padStart(2, '0');
@@ -218,12 +196,9 @@ if (typeof BigInt === 'undefined') {
     },
     
     /**
-     * Convert BigInt to bytes
-     * @param value BigInt value
-     * @param length Number of bytes to return
-     * @returns Byte array
+     * Convert bigint to bytes
      */
-    _bigIntToBytes: (value: BigInt, length: number): Uint8Array => {
+    _bigintToBytes: (value: bigint, length: number): Uint8Array => {
       const bytes = new Uint8Array(length);
       let tempValue = value; // Use temporary value for shifting
       

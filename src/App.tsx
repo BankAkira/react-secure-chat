@@ -279,6 +279,16 @@ function App() {
     
     try {
       setIsLoading(true);
+      if (!account || !eccContract || !keyShareContract || !provider || !userId) {
+        toast({
+          title: "Initialization Error",
+          description: "Please connect wallet and set user ID first",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
       
       // 1. Get recipient's public key
       const recipientPublicKey = await eccContract.getPublicKey(recipientAddr);
@@ -291,11 +301,11 @@ function App() {
       const receipt = await computeTx.wait();
       
       // Extract keyId from event logs
-      const event = receipt.events?.find(e => e.event === 'SharedKeyComputed');
+      const event = receipt.events?.find((e: any) => e.event === 'SharedKeyComputed');
       if (!event) {
         throw new Error("Failed to extract keyId from transaction logs");
       }
-      const keyId = event.args.keyId;
+      const keyId = event.args?.keyId;
       
       // 4. Derive encryption key from keyId
       const key = await PBKDF2.deriveKey(keyId, 'SecureChatSystem');
