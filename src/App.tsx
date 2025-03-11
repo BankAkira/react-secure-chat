@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { ChakraProvider, Box, Flex, VStack, Heading, Text, Input, Button, useToast, 
   Tabs, TabList, TabPanels, Tab, TabPanel, Avatar, Divider, List, ListItem } from '@chakra-ui/react';
-import { AESGCM, PBKDF2, ECCUtils, ShamirSecretSharing, IPFSService } from './services';
+import { AESGCM, PBKDF2, ECCUtils, ShamirContractService, IPFSService } from './services';
 import ECCOperationsABI from './contracts/ECCOperations.json';
 import KeyShareRegistryABI from './contracts/KeyShareRegistry.json';
 
@@ -142,7 +142,7 @@ function App() {
       });
       return;
     }
-
+  
     try {
       setIsLoading(true);
       
@@ -163,60 +163,94 @@ function App() {
         return;
       }
       
-      // Split private key using Shamir's Secret Sharing
+      // Use Shamir Contract to split private key
+      console.log("Splitting private key using Shamir contract...");
       const numShares = 5;
       const threshold = 3;
-      const shares = ShamirSecretSharing.splitSecret(privateKeyBytes, numShares, threshold);
       
-      // Encrypt shares
-      const encryptedShares = await Promise.all(
-        shares.map(share => {
-          return AESGCM.encryptShare(share, recoveryPassword);
-        })
-      );
+      try {
+        // Initialize or get the user's Shamir contract
+        const shamirShares = await ShamirContractService.splitSecret(
+          provider,
+          privateKeyBytes,
+          numShares,
+          threshold
+        );
+        
+        console.log("Successfully generated shares:", shamirShares.length);
+        
+        // Encrypt shares
+        console.log("Encrypting shares with password...");
+        const encryptedShares = await Promise.all(
+          shamirShares.map(async (share, index) => {
+            try {
+              return await AESGCM.encryptShare(share, recoveryPassword);
+            } catch (encryptError: unknown) {
+              const errorMessage = encryptError instanceof Error 
+                ? encryptError.message 
+                : String(encryptError);
+                
+              console.error(`Error encrypting share ${index}:`, errorMessage);
+              throw new Error(`Share encryption failed: ${errorMessage}`);
+            }
+          })
+        );
+        
+        console.log("Successfully encrypted shares");
+        
+        // Register public key on blockchain
+        console.log("Registering public key on blockchain...");
+        const registerTx = await eccContract.registerPublicKey(publicKeyBytes);
+        await registerTx.wait();
+        console.log("Public key registered successfully");
+        
+        // Store key shares on blockchain
+        console.log("Storing key shares on blockchain...");
+        const shareTx = await keyShareContract.storeShares(encryptedShares, numShares, threshold);
+        await shareTx.wait();
+        console.log("Shares stored successfully");
+        
+        // Additional code continues as before
+      } catch (shamirError: unknown) {
+        const errorMessage = shamirError instanceof Error 
+          ? shamirError.message 
+          : String(shamirError);
+          
+        console.error("Shamir contract error:", errorMessage);
+        toast({
+          title: "Shamir Contract Error",
+          description: `Error using Shamir contract: ${errorMessage || 'Unknown error'}`,
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        throw shamirError; // Re-throw to be caught by outer catch
+      }
       
-      // Register public key on blockchain
-      const registerTx = await eccContract.registerPublicKey(publicKeyBytes);
-      await registerTx.wait();
+      // Rest of the function continues...
+    
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("Error initializing user:", errorMessage);
       
-      // Store key shares on blockchain
-      const shareTx = await keyShareContract.storeShares(encryptedShares, numShares, threshold);
-      await shareTx.wait();
+      // Check for specific error types
+      let userErrorMessage = "Failed to initialize user";
       
-      // Store initialization info securely in localStorage
-      const initData = {
-        userId,
-        address: account,
-        initialized: true,
-        publicKey: ethers.utils.hexlify(publicKeyBytes),
-        // Don't store private key directly
-      };
-      localStorage.setItem('secureChat_userData', JSON.stringify(initData));
+      if (err instanceof Error) {
+        if (err.message.includes("UNPREDICTABLE_GAS_LIMIT")) {
+          userErrorMessage = "Contract transaction error. Please check your network connection and try again.";
+        } else if (err.message.includes("user rejected transaction")) {
+          userErrorMessage = "Transaction was rejected in your wallet.";
+        } else {
+          userErrorMessage = err.message.substring(0, 100); // Limit length of error message
+        }
+      }
       
-      setIsInitialized(true);
-      
-      toast({
-        title: "Setup Complete",
-        description: "Your secure chat identity has been created",
-        status: "success",
-        duration: 5000,
-        isClosable: true,
-      });
-      
-      // Save a reference to the key in localStorage (in a real app, use a more secure method)
-      localStorage.setItem('secureChat_recovery', JSON.stringify({
-        numShares,
-        threshold,
-        // Don't store password
-      }));
-      
-    } catch (err) {
-      console.error("Error initializing user:", err);
       toast({
         title: "Setup Failed",
-        description: "Failed to initialize user",
+        description: userErrorMessage,
         status: "error",
-        duration: 5000,
+        duration: 7000, // Longer duration for errors
         isClosable: true,
       });
     } finally {
